@@ -96,10 +96,10 @@ public sealed class IptablesService : IIptablesService
     private readonly JailerOptions _options;
     private readonly ILogger _logger;
 
-    public IptablesService(ICommandRunner runner, IOptions<JailerOptions> options)
+    public IptablesService(ICommandRunner runner, JailerOptions options)
     {
         _runner = runner;
-        _options = options.Value;
+        _options = options;
         _logger = Log.ForContext<IptablesService>();
     }
 

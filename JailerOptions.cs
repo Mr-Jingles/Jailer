@@ -31,4 +31,10 @@ public sealed class JailerOptions
 /// <summary>Settings for the iptables rules Jailer creates and removes.</summary>
 public sealed class IptablesOptions
 {
-    /// <summary>i
+    public string Executable {get; set;} = "iptables";
+
+    public string Chain { get; set; } = "INPUT";
+
+    public string RuleTarget {get; set;} = "DROP";
+
+}
