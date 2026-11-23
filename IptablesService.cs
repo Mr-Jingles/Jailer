@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Jailer.Options;
+using Serilog;
 
 namespace Jailer.Services;
 
@@ -17,15 +17,15 @@ public interface ICommandRunner
 
 public sealed class ProcessCommandRunner : ICommandRunner
 {
-    private readonly ILogger<ProcessCommandRunner> _logger;
+    private readonly ILogger _logger;
 
-    public ProcessCommandRunner(ILogger<ProcessCommandRunner> logger) => _logger = logger;
+    public ProcessCommandRunner(ILogger logger) => _logger = Log.Logger.ForContext<ProcessCommandRunner>();
 
     public async Task<CommandResult> RunAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken = default)
     {
         var args = arguments.ToArray();
         var commandLine = string.Join(' ', new[] { fileName }.Concat(args));
-        _logger.LogDebug("Executing: {CommandLine}", commandLine);
+        _logger.Debug("Executing: {CommandLine}", commandLine);
 
         try
         {
@@ -59,17 +59,17 @@ public sealed class ProcessCommandRunner : ICommandRunner
             var stdout = await stdoutTask.ConfigureAwait(false);
             var stderr = await stderrTask.ConfigureAwait(false);
 
-            _logger.LogDebug("{FileName} exited with {ExitCode}.", fileName, process.ExitCode);
+            _logger.Debug("{FileName} exited with {ExitCode}.", fileName, process.ExitCode);
             if (process.ExitCode != 0)
             {
-                _logger.LogWarning("Command '{CommandLine}' failed (exit {ExitCode}): {StdErr}", commandLine, process.ExitCode, stderr.Trim());
+                _logger.Warning("Command '{CommandLine}' failed (exit {ExitCode}): {StdErr}", commandLine, process.ExitCode, stderr.Trim());
             }
 
             return new CommandResult(process.ExitCode, stdout, stderr);
         }
-        catch (Exception ex) when (ex is FileNotFoundException or Win32Exception or System.ComponentModel.Win32Exception)
+        catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute '{fileName}'. Is it installed and on PATH?");
+            _logger.Error(ex, "Failed to execute '{fileName}'. Is it installed and on PATH?");
             return new CommandResult(-1, string.Empty, ex.Message);
         }
     }
@@ -94,13 +94,13 @@ public sealed class IptablesService : IIptablesService
 
     private readonly ICommandRunner _runner;
     private readonly JailerOptions _options;
-    private readonly ILogger<IptablesService> _logger;
+    private readonly ILogger _logger;
 
-    public IptablesService(ICommandRunner runner, IOptions<JailerOptions> options, ILogger<IptablesService> logger)
+    public IptablesService(ICommandRunner runner, IOptions<JailerOptions> options)
     {
         _runner = runner;
         _options = options.Value;
-        _logger = logger;
+        _logger = Log.ForContext<IptablesService>();
     }
 
     private string BuildComment(string ip) => $"{CommentPrefix}{ip}";
@@ -111,7 +111,7 @@ public sealed class IptablesService : IIptablesService
 
         if (await IsJailedAsync(ip, cancellationToken).ConfigureAwait(false))
         {
-            _logger.LogDebug("{Ip} is already jailed.", ip);
+            _logger.Debug("{Ip} is already jailed.", ip);
             return false;
         }
 
@@ -126,11 +126,11 @@ public sealed class IptablesService : IIptablesService
 
         if (!result.Success)
         {
-            _logger.LogError("Failed to jail {Ip}: {StdErr}", ip, result.StandardError.Trim());
+            _logger.Error("Failed to jail {Ip}: {StdErr}", ip, result.StandardError.Trim());
             return false;
         }
 
-        _logger.LogInformation("Jailed {Ip} in chain {Chain} (target {Target}).", ip, iptables.Chain, iptables.RuleTarget);
+        _logger.Information("Jailed {Ip} in chain {Chain} (target {Target}).", ip, iptables.Chain, iptables.RuleTarget);
         return true;
     }
 
@@ -140,7 +140,7 @@ public sealed class IptablesService : IIptablesService
 
         if (!await IsJailedAsync(ip, cancellationToken).ConfigureAwait(false))
         {
-            _logger.LogDebug("{Ip} is not currently jailed.", ip);
+            _logger.Debug("{Ip} is not currently jailed.", ip);
             return false;
         }
 
@@ -156,11 +156,11 @@ public sealed class IptablesService : IIptablesService
 
         if (!result.Success)
         {
-            _logger.LogError("Failed to unjail {Ip}: {StdErr}", ip, result.StandardError.Trim());
+            _logger.Error("Failed to unjail {Ip}: {StdErr}", ip, result.StandardError.Trim());
             return false;
         }
 
-        _logger.LogInformation("Unjailed {Ip}.", ip);
+        _logger.Information("Unjailed {Ip}.", ip);
         return true;
     }
 
@@ -171,7 +171,7 @@ public sealed class IptablesService : IIptablesService
 
         if (!result.Success)
         {
-            _logger.LogWarning("Failed to list chain {Chain}: {StdErr}", iptables.Chain, result.StandardError.Trim());
+            _logger.Warning("Failed to list chain {Chain}: {StdErr}", iptables.Chain, result.StandardError.Trim());
             return [];
         }
 
