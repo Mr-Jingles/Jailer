@@ -18,7 +18,10 @@ public sealed class ProcessCommandRunner : ICommandRunner
 {
     private readonly ILogger _logger;
 
-    public ProcessCommandRunner(ILogger logger) => _logger = Log.ForContext<ProcessCommandRunner>();
+    public ProcessCommandRunner()
+    {
+        _logger = Log.ForContext<ProcessCommandRunner>();
+    }
 
     public async Task<CommandResult> RunAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken = default)
     {
