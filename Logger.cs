@@ -39,17 +39,17 @@ namespace Jailer
 
         public void Information(string message, params object[] data)
         {
-            Console.WriteLine(processMessage(message));
+            Console.WriteLine(processMessage(message, data));
         }
 
         public void Warning(string message, params object[] data)
         {
-            Console.WriteLine(processMessage(message));
+            Console.WriteLine(processMessage(message, data));
         }
 
         public void Error(string message, params object[] data)
         {
-            Console.Error.WriteLine(processMessage(message));
+            Console.Error.WriteLine(processMessage(message, data));
         }
 
         private string processMessage(string message, params object[] data)
@@ -66,7 +66,7 @@ namespace Jailer
             sb.Append(message);
 
             var output = sb.ToString();
-            string.Format(output, data);
+            output = String.Format(output, data);
 
             return output;
         }

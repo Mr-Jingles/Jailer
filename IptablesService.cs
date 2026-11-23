@@ -58,17 +58,17 @@ public sealed class ProcessCommandRunner : ICommandRunner
             var stdout = await stdoutTask.ConfigureAwait(false);
             var stderr = await stderrTask.ConfigureAwait(false);
 
-            _logger.Debug("{FileName} exited with {ExitCode}.", fileName, process.ExitCode);
+            _logger.Debug("{0} exited with {1}.", fileName, process.ExitCode);
             if (process.ExitCode != 0)
             {
-                _logger.Warning("Command '{CommandLine}' failed (exit {ExitCode}): {StdErr}", commandLine, process.ExitCode, stderr.Trim());
+                _logger.Warning("Command '{0}' failed (exit {1}): {2}", commandLine, process.ExitCode, stderr.Trim());
             }
 
             return new CommandResult(process.ExitCode, stdout, stderr);
         }
         catch (Exception ex)
         {
-            _logger.Error("Failed to execute '{fileName}'. Is it installed and on PATH?", ex);
+            _logger.Error("Failed to execute '{0}'. Is it installed and on PATH?", ex);
             return new CommandResult(-1, string.Empty, ex.Message);
         }
     }
@@ -110,7 +110,7 @@ public sealed class IptablesService : IIptablesService
 
         if (await IsJailedAsync(ip, cancellationToken).ConfigureAwait(false))
         {
-            _logger.Debug("{Ip} is already jailed.", ip);
+            _logger.Debug("{0} is already jailed.", ip);
             return false;
         }
 
@@ -125,11 +125,11 @@ public sealed class IptablesService : IIptablesService
 
         if (!result.Success)
         {
-            _logger.Error("Failed to jail {Ip}: {StdErr}", ip, result.StandardError.Trim());
+            _logger.Error("Failed to jail {0}: {1}", ip, result.StandardError.Trim());
             return false;
         }
 
-        _logger.Information("Jailed {Ip} in chain {Chain} (target {Target}).", ip, iptables.Chain, iptables.RuleTarget);
+        _logger.Information("Jailed {0} in chain {1} (target {2}).", ip, iptables.Chain, iptables.RuleTarget);
         return true;
     }
 
@@ -139,7 +139,7 @@ public sealed class IptablesService : IIptablesService
 
         if (!await IsJailedAsync(ip, cancellationToken).ConfigureAwait(false))
         {
-            _logger.Debug("{Ip} is not currently jailed.", ip);
+            _logger.Debug("{0} is not currently jailed.", ip);
             return false;
         }
 
@@ -155,11 +155,11 @@ public sealed class IptablesService : IIptablesService
 
         if (!result.Success)
         {
-            _logger.Error("Failed to unjail {Ip}: {StdErr}", ip, result.StandardError.Trim());
+            _logger.Error("Failed to unjail {0}: {1}", ip, result.StandardError.Trim());
             return false;
         }
 
-        _logger.Information("Unjailed {Ip}.", ip);
+        _logger.Information("Unjailed {0}.", ip);
         return true;
     }
 
@@ -170,7 +170,7 @@ public sealed class IptablesService : IIptablesService
 
         if (!result.Success)
         {
-            _logger.Warning("Failed to list chain {Chain}: {StdErr}", iptables.Chain, result.StandardError.Trim());
+            _logger.Warning("Failed to list chain {0}: {1}", iptables.Chain, result.StandardError.Trim());
             return [];
         }
 
