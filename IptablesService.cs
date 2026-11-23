@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Serilog;
 
 namespace Jailer.Services;
 
@@ -19,7 +18,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
 {
     private readonly ILogger _logger;
 
-    public ProcessCommandRunner(ILogger logger) => _logger = Log.Logger.ForContext<ProcessCommandRunner>();
+    public ProcessCommandRunner(ILogger logger) => _logger = Log.ForContext<ProcessCommandRunner>();
 
     public async Task<CommandResult> RunAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken = default)
     {
@@ -69,7 +68,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Failed to execute '{fileName}'. Is it installed and on PATH?");
+            _logger.Error("Failed to execute '{fileName}'. Is it installed and on PATH?", ex);
             return new CommandResult(-1, string.Empty, ex.Message);
         }
     }
