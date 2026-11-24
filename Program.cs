@@ -1,8 +1,9 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Jailer.Services;
 using Microsoft.Extensions.Hosting;
+using Jailer;
 
-var logger = Jailer.Log.ForContext<Program>();
+var logger = new Logger(null);
 
 try
 {
