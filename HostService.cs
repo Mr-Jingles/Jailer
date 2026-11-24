@@ -36,10 +36,6 @@ namespace Jailer.Services
 
             // Start the background loop in a separate task so we don't block startup
             _backgroundTask = RunMainLoopAsync(_cts.Token);
-
-            // Ensure the log monitor is running if it has its own loop.
-            _ = _logMonitor.StartAsync(CancellationToken.None);
-
             _logger.Information("Finished Start up");
             return Task.CompletedTask;
         }
@@ -56,8 +52,8 @@ namespace Jailer.Services
             {
                 while (!ct.IsCancellationRequested)
                 {
-                    var logTask = logTimer.WaitForNextAsync(ct).AsTask();
-                    var cleanupTask = cleanupTimer.WaitForNextAsync(ct).AsTask();
+                    var logTask = logTimer.WaitForNextTickAsync(ct).AsTask();
+                    var cleanupTask = cleanupTimer.WaitForNextTickAsync(ct).AsTask();
 
                     var completedTask = await Task.WhenAny(logTask, cleanupTask);
 
@@ -133,8 +129,6 @@ namespace Jailer.Services
                 }
             }
 
-            _iptablesService = null;
-            _commandRunner = null;
         }
 
         public void Dispose()

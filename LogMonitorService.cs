@@ -1,12 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using Jailer.Models;
-using Jailer.Services;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
@@ -149,6 +142,15 @@ namespace Jailer.Services
             await Task.CompletedTask;
         }
 
+        public void MarkAsJailed(string ip)
+        {
+            lock (_lock)
+            {
+                _jailedIps[ip] = DateTime.UtcNow.Add(JailDuration);
+            }
+            _logger.Information("IP {0} has been marked as jailed until {1}", ip, _jailedIps[ip]);
+        }
+
         public async Task RemoveJailedIpAsync(string ip)
         {
             lock (_lock)
@@ -157,5 +159,8 @@ namespace Jailer.Services
             }
             _logger.Information("IP {0} has been removed from the jailed list", ip);
             await Task.CompletedTask;
-public TimeSpan JailDuration => TimeSpan.FromSeconds(_options.JailDurationSeconds);
+        }
+
+        public TimeSpan JailDuration => TimeSpan.FromSeconds(_options.JailDurationSeconds);
+    }
 }
