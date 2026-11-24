@@ -1,43 +1,145 @@
 ﻿using Microsoft.Extensions.Hosting;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Jailer.Models;
+using Jailer.Services;
 
 namespace Jailer.Services
 {
-    public class HostService: IHostedService
+    public class HostService : IHostedService, IDisposable
     {
         private readonly ILogger _logger;
-        private ICommandRunner? _commandRunner;
-        private IIptablesService? _iptablesService;
-         
-        public HostService() { 
+        private readonly ICommandRunner _commandRunner;
+        private readonly IIptablesService _iptablesService;
+        private readonly ILogMonitorService _logMonitor;
+        private CancellationTokenSource? _cts;
+        private Task? _backgroundTask;
+
+        public HostService(Microsoft.Extensions.Options.IOptions<JailerOptions> options)
+        {
             _logger = Log.ForContext<HostService>();
+            _commandRunner = new ProcessCommandRunner();
+            var jailerOptions = options.Value;
+            _iptablesService = new IptablesService(_commandRunner, jailerOptions);
+
+            // Manually providing dependencies for LogMonitorService since we are avoiding DI in Program.cs
+            var optionsWrapper = Microsoft.Extensions.Options.Options.Create(jailerOptions);
+            _logMonitor = new LogMonitorService(optionsWrapper, _iptablesService);
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
             _logger.Information("Starting up...");
-            var jailerOptions = new JailerOptions();
-            _commandRunner = new ProcessCommandRunner();
-            _iptablesService = new IptablesService(_commandRunner ,jailerOptions);
 
+            _cts = new CancellationTokenSource();
 
-            //Here we need to create out main loop based on timers.
+            // Start the background loop in a separate task so we don't block startup
+            _backgroundTask = RunMainLoopAsync(_cts.Token);
 
-            //Check every min for new logs.
-
-            //If a new ip needs jailing  then jail it.
-
-            //if a jailed ip is now past due remove it.
+            // Ensure the log monitor is running if it has its own loop.
+            _ = _logMonitor.StartAsync(CancellationToken.None);
 
             _logger.Information("Finished Start up");
             return Task.CompletedTask;
         }
 
-        public Task StopAsync(CancellationToken cancellationToken)
+        private async Task RunMainLoopAsync(CancellationToken ct)
         {
+            // We use two timers (via PeriodicTimer) for the different requirements:
+            // 1. Check logs every minute
+            using var logTimer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+            // 2. Cleanup expired jails (can be more frequent, e.g., every 30 seconds)
+            using var cleanupTimer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+
+            try
+            {
+                while (!ct.IsCancellationRequested)
+                {
+                    var logTask = logTimer.WaitForNextAsync(ct).AsTask();
+                    var cleanupTask = cleanupTimer.WaitForNextAsync(ct).AsTask();
+
+                    var completedTask = await Task.WhenAny(logTask, cleanupTask);
+
+                    if (completedTask == logTask)
+                    {
+                        await CheckLogsAndJailAsync();
+                    }
+                    else
+                    {
+                        await CleanupExpiredJailsAsync();
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.Information("Main loop cancellation requested.");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("An error occurred in the main loop. {0}", ex);
+            }
+        }
+
+        private async Task CheckLogsAndJailAsync()
+        {
+            _logger.Debug("Checking logs for new IPs to jail...");
+            var violatedIps = _logMonitor.GetViolatedIps();
+
+            foreach (var ip in violatedIps)
+            {
+                if (!await _iptablesService.IsIpJailedAsync(ip))
+                {
+                    _logger.Information("Jailing IP: {IP} due to log violation.", ip);
+                    await _iptablesService.JailIpAsync(ip);
+                }
+            }
+        }
+
+        private async Task CleanupExpiredJailsAsync()
+        {
+            _logger.Debug("Checking for expired jail entries to remove...");
+            var expiredIps = await _logMonitor.GetExpiredIpsAsync();
+
+            foreach (var ip in expiredIps)
+            {
+                _logger.Information("Unjailing IP: {IP} - expiration reached.", ip);
+                await _iptablesService.UnjailIpAsync(ip);
+            }
+        }
+
+        public async Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.Information("Stopping service...");
+
+            if (_cts != null)
+            {
+                _cts.Cancel();
+                try
+                {
+                    // Wait for the background task to complete gracefully
+                    if (_backgroundTask != null)
+                    {
+                        await Task.WhenAny(_backgroundTask, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error("Error during graceful shutdown. {0}", ex);
+                }
+                finally
+                {
+                    _cts.Dispose();
+                }
+            }
+
             _iptablesService = null;
             _commandRunner = null;
+        }
 
-            return Task.CompletedTask;
+        public void Dispose()
+        {
+            _cts?.Dispose();
         }
     }
 }

@@ -58,3 +58,5 @@ nunit-*.xml
 
 obj
 .vs
+.vscode
+.mcp.json
