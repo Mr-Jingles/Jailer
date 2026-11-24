@@ -3,7 +3,9 @@ namespace Jailer.Models;
 public class JailerOptions
 {
     public List<JailRule> Jails { get; set; } = new();
-    public IptablesSettings Iptables { get; set; } = new();
+
+    /// <summary>Default jail duration in seconds, applied when an IP is marked as jailed.</summary>
+    public int JailDurationSeconds { get; set; } = 300;
 }
 
 public class JailRule

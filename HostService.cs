@@ -21,7 +21,7 @@ namespace Jailer.Services
             _logger = Log.ForContext<HostService>();
             _commandRunner = new ProcessCommandRunner();
             var jailerOptions = options.Value;
-            _iptablesService = new IptablesService(_commandRunner, jailerOptions);
+            _iptablesService = new IptablesService(_commandRunner);
 
             // Manually providing dependencies for LogMonitorService since we are avoiding DI in Program.cs
             var optionsWrapper = Microsoft.Extensions.Options.Options.Create(jailerOptions);
@@ -84,10 +84,10 @@ namespace Jailer.Services
 
             foreach (var ip in violatedIps)
             {
-                if (!await _iptablesService.IsIpJailedAsync(ip))
+                if (!await _iptablesService.IsJailedAsync(ip))
                 {
                     _logger.Information("Jailing IP: {IP} due to log violation.", ip);
-                    await _iptablesService.JailIpAsync(ip);
+                    await _iptablesService.JailAsync(ip);
                 }
             }
         }
@@ -100,7 +100,7 @@ namespace Jailer.Services
             foreach (var ip in expiredIps)
             {
                 _logger.Information("Unjailing IP: {IP} - expiration reached.", ip);
-                await _iptablesService.UnjailIpAsync(ip);
+                await _iptablesService.UnjailAsync(ip);
             }
         }
 

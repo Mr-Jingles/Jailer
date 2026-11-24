@@ -76,6 +76,9 @@ public interface IIptablesService
     /// <summary>Removes the Jailer-marked blocking rule for the given IP (if present).</summary>
     Task<bool> UnjailAsync(string ip, CancellationToken cancellationToken = default);
 
+    /// <summary>Returns true if the given IP is currently blocked by a Jailer-marked rule.</summary>
+    Task<bool> IsJailedAsync(string ip, CancellationToken cancellationToken = default);
+
     /// <summary>Enumerates all IPs currently blocked by a Jailer-marked rule.</summary>
     Task<IReadOnlyCollection<string>> GetJailedIpsAsync(CancellationToken cancellationToken = default);
 
@@ -83,25 +86,36 @@ public interface IIptablesService
     Task CleanupAllJailsAsync(CancellationToken cancellationToken = default);
 }
 
+/// <summary>Settings for the iptables rules Jailer creates and removes.</summary>
+public sealed class IptablesOptions
+{
+    public string Executable { get; set; } = "iptables";
+
+    public string Chain { get; set; } = "INPUT";
+
+    public string RuleTarget { get; set; } = "DROP";
+
+}
+
 public sealed class IptablesService : IIptablesService
 {
     private static readonly string CommentPrefix = "jailer:";
     private readonly ICommandRunner _runner;
-    private readonly JailerOptions _options;
+    private readonly IptablesOptions _options;
 
     private readonly ILogger _logger = Log.ForContext<IptablesService>();
 
-    public IptablesService(ICommandRunner runner, JailerOptions options)
+    public IptablesService(ICommandRunner runner)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options = new IptablesOptions();
     }
 
     private string BuildComment(string ip) => $"{CommentPrefix}{ip}";
 
     public async Task<bool> JailAsync(string ip, CancellationToken cancellationToken = default)
     {
-        var iptables = _options.Iptables;
+        var iptables = _options;
 
         if (await IsJailedAsync(ip, cancellationToken).ConfigureAwait(false))
         {
@@ -130,7 +144,7 @@ public sealed class IptablesService : IIptablesService
 
     public async Task<bool> UnjailAsync(string ip, CancellationToken cancellationToken = default)
     {
-        var iptables = _options.Iptables;
+        var iptables = _options;
 
         if (!await IsJailedAsync(ip, cancellationToken).ConfigureAwait(false))
         {
@@ -160,7 +174,7 @@ public sealed class IptablesService : IIptablesService
 
     public async Task<IReadOnlyCollection<string>> GetJailedIpsAsync(CancellationToken cancellationToken = default)
     {
-        var iptables = _options.Iptables;
+        var iptables = _options;
         var result = await _runner.RunAsync(iptables.Executable, new[] { "-S", iptables.Chain }, cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
@@ -206,7 +220,7 @@ public sealed class IptablesService : IIptablesService
         _logger.Information("Cleanup complete. Removed {0} rules.", jailedIps.Count);
     }
 
-    private async Task<bool> IsJailedAsync(string ip, CancellationToken cancellationToken)
+    public async Task<bool> IsJailedAsync(string ip, CancellationToken cancellationToken = default)
     {
         var jailed = await GetJailedIpsAsync(cancellationToken).ConfigureAwait(false);
         return jailed.Contains(ip, StringComparer.OrdinalIgnoreCase);
