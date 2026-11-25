@@ -2,6 +2,7 @@
 Description=Jailer Service - bans ip address
 [Service]
 Type=simple
+WorkingDirectory=/opt
 ExecStart=/opt/Jailer
 [Install]
 WantedBy=multi-user.target

@@ -1,5 +1,9 @@
+using System.Text.Json.Serialization;
+
 namespace Jailer.Models;
 
+// Trim-safe deserialization: the JSON is read with a source-generated serializer (JailerJsonContext)
+// instead of reflection-based configuration binding, so trimmed publishes keep working.
 public class JailerOptions
 {
     public List<JailRule> Jails { get; set; } = new();
@@ -21,4 +25,14 @@ public class IptablesSettings
     public string Chain { get; set; } = "INPUT";
     public string Executable { get; set; } = "iptables";
     public string RuleTarget { get; set; } = "DROP";
+}
+
+/// <summary>
+/// Source-generated JSON serializer context. Using this (instead of reflection-based
+/// configuration binding) is what makes deserialization survive .NET trimming.
+/// </summary>
+[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(JailerOptions))]
+internal partial class JailerJsonContext : JsonSerializerContext
+{
 }
