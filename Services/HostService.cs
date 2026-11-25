@@ -9,6 +9,7 @@ namespace Jailer.Services
         private readonly ICommandRunner _commandRunner;
         private readonly IIptablesService _iptablesService;
         private readonly ILogMonitorService _logMonitor;
+        private readonly JailerOptions _options;
         private CancellationTokenSource? _cts;
         private Task? _backgroundTask;
         private Task? _monitorTask;
@@ -18,6 +19,7 @@ namespace Jailer.Services
             _logger = Log.ForContext<HostService>();
             _commandRunner = new ProcessCommandRunner();
             var jailerOptions = options.Value;
+            _options = jailerOptions;
             _iptablesService = new IptablesService(_commandRunner);
 
             // Manually providing dependencies for LogMonitorService since we are avoiding DI in Program.cs
@@ -42,12 +44,6 @@ namespace Jailer.Services
 
         private async Task RunMainLoopAsync(CancellationToken ct)
         {
-            // We use two timers (via PeriodicTimer) for the different requirements:
-            // 1. Check logs every minute
-            using var logTimer = new PeriodicTimer(TimeSpan.FromMinutes(1));
-            // 2. Cleanup expired jails (can be more frequent, e.g., every 30 seconds)
-            using var cleanupTimer = new PeriodicTimer(TimeSpan.FromSeconds(30));
-
             try
             {
                 // when we start up lets clean up any left over
@@ -58,33 +54,55 @@ namespace Jailer.Services
                 _logger.Error("Failed to clean up preexisting rules: {0}", ex.Message);
             }
 
+            // Two independent loops, one per timer. A PeriodicTimer only allows a single
+            // outstanding WaitForNextTickAsync at a time, so the two timers must never be
+            // awaited concurrently (that is what caused the InvalidOperationException).
+            var logLoop = RunLogCheckLoopAsync(ct);
+            var cleanupLoop = RunCleanupLoopAsync(ct);
+
             try
             {
-
-                while (!ct.IsCancellationRequested)
-                {
-                    var logTask = logTimer.WaitForNextTickAsync(ct).AsTask();
-                    var cleanupTask = cleanupTimer.WaitForNextTickAsync(ct).AsTask();
-
-                    var completedTask = await Task.WhenAny(logTask, cleanupTask);
-
-                    if (completedTask == logTask)
-                    {
-                        await CheckLogsAndJailAsync();
-                    }
-                    else
-                    {
-                        await CleanupExpiredJailsAsync();
-                    }
-                }
+                await Task.WhenAll(logLoop, cleanupLoop);
             }
             catch (OperationCanceledException)
             {
                 _logger.Information("Main loop cancellation requested.");
             }
-            catch (Exception ex)
+        }
+
+        private async Task RunLogCheckLoopAsync(CancellationToken ct)
+        {
+            // Check for new violations every minute.
+            using var logTimer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+
+            try
             {
-                _logger.Error("An error occurred in the main loop. {0}", ex);
+                while (await logTimer.WaitForNextTickAsync(ct))
+                {
+                    await CheckLogsAndJailAsync();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.Debug("Log check loop cancelled.");
+            }
+        }
+
+        private async Task RunCleanupLoopAsync(CancellationToken ct)
+        {
+            // Release expired jails more frequently, e.g. every 30 seconds.
+            using var cleanupTimer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+
+            try
+            {
+                while (await cleanupTimer.WaitForNextTickAsync(ct))
+                {
+                    await CleanupExpiredJailsAsync();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.Debug("Cleanup loop cancelled.");
             }
         }
 
@@ -98,9 +116,24 @@ namespace Jailer.Services
                 if (!await _iptablesService.IsJailedAsync(ip))
                 {
                     _logger.Information("Jailing IP: {0} due to log violation.", ip);
-                    await _iptablesService.JailAsync(ip);
+                    var jailed = await _iptablesService.JailAsync(ip);
+
+                    // Record the expiration so the cleanup loop can release it later.
+                    if (jailed)
+                    {
+                        _logMonitor.MarkAsJailed(ip, ruleForIp(ip));
+                    }
                 }
             }
+        }
+
+        /// <summary>Best-effort lookup of the jail rule that produced a violation.</summary>
+        private Jailer.Models.JailRule? ruleForIp(string ip)
+        {
+            // The monitor does not expose which rule fired, so fall back to the first
+            // configured rule's ban time when one exists.
+            var jails = _options.Jails;
+            return jails is { Count: > 0 } ? jails[0] : null;
         }
 
         private async Task CleanupExpiredJailsAsync()

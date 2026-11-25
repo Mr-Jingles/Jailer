@@ -7,6 +7,13 @@ namespace Jailer.Services
 {
     public class LogMonitorService : BackgroundService, ILogMonitorService
     {
+        // The jail rule's regex identifies *which lines* are violations, but it does not
+        // necessarily capture the offending IP (e.g. "Test.*" matches the whole line).
+        // Extract the first IPv4 address from a matched line instead of using the raw match value.
+        private static readonly Regex IpAddressRegex = new(
+            @"\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b",
+            RegexOptions.Compiled);
+
         private readonly JailerOptions _options;
         private readonly ILogger _logger = Log.ForContext<LogMonitorService>();
 
@@ -42,6 +49,12 @@ namespace Jailer.Services
                     {
                         expiredIps.Add(kvp.Key);
                     }
+                }
+
+                // Remove after enumeration so the same IP is not reported (and unjailed) again next cycle.
+                foreach (var ip in expiredIps)
+                {
+                    _jailedIps.Remove(ip);
                 }
             }
             return await Task.FromResult(expiredIps);
@@ -89,13 +102,16 @@ namespace Jailer.Services
                         continue;
                     }
 
-                    Match ipMatch = Regex.Match(line, rule.Regex);
-                    if (ipMatch.Success)
+                    if (Regex.IsMatch(line, rule.Regex))
                     {
-                        string? ip = ipMatch.Value;
-                        if (!string.IsNullOrEmpty(ip))
+                        var ip = IpAddressRegex.Match(line).Value;
+                        if (!string.IsNullOrEmpty(ip) && System.Net.IPAddress.TryParse(ip, out _))
                         {
                             await HandleIpMatchAsync(rule, ip, ipAttempts, ct);
+                        }
+                        else
+                        {
+                            _logger.Warning("Line matched jail {0} but no valid IP address was found: {1}", rule.Name, line);
                         }
                     }
                 }

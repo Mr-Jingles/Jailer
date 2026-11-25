@@ -21,3 +21,12 @@ Loading jail rules from /home/edward/test/jails.json
 There seems to be an issue with the period timer
 And also while the Log Monitor service flagged correctly that an ip should be jailed it didnt seem like IptablesService was called to jail that IP 
 It seems the regex to extract IP Addresses from the Log line isnt working
+
+When any new IP is banned we should also the state of the jails like so
+{jail name}
+  {ip}  {time left till unblock in mins} mins
+{next jail name}
+  {ip}  {time left till unblock in mins} mins
+  {ip}  {time left till unblock in mins} mins
+{next jail name}
+  empty

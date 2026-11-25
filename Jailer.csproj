@@ -13,7 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Tester\" />
+    <!-- Tester is its own project; keep it out of this compilation. -->
+    <Compile Remove="Tester\**" />
+    <EmbeddedResource Remove="Tester\**" />
+    <None Remove="Tester\**" />
   </ItemGroup>
 
   <ItemGroup>
