@@ -1,0 +1,1 @@
+Do not use Dependency injection other than to bootstrap between program.cs and HostService.cs

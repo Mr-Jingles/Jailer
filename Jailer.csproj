@@ -11,4 +11,14 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.23" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Tester\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="jails.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

@@ -54,7 +54,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
 
                 if (process.ExitCode != 0)
                 {
-                _logger.Warning("Command '{0} {1}' failed (exit {2}): {3}", fileName, string.Join(' ', arguments), process.ExitCode, stderr.Trim());
+                    _logger.Warning("Command '{0} {1}' failed (exit {2}): {3}", fileName, string.Join(' ', arguments), process.ExitCode, stderr.Trim());
                 }
 
             return new CommandResult(process.ExitCode, stdout, stderr);

@@ -8,7 +8,6 @@ namespace Jailer.Services
     public class LogMonitorService : BackgroundService, ILogMonitorService
     {
         private readonly JailerOptions _options;
-        private readonly IIptablesService _iptablesService;
         private readonly ILogger _logger = Log.ForContext<LogMonitorService>();
 
         // Track IPs that have been jailed and their expiration time
@@ -16,10 +15,9 @@ namespace Jailer.Services
         private readonly HashSet<string> _violatedIps = new();
         private readonly object _lock = new();
 
-        public LogMonitorService(IOptions<JailerOptions> options, IIptablesService iptablesService)
+        public LogMonitorService(IOptions<JailerOptions> options)
         {
             _options = options.Value;
-            _iptablesService = iptablesService;
         }
 
         public IEnumerable<string> GetViolatedIps()

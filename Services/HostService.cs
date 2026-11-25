@@ -1,9 +1,5 @@
 ﻿using Microsoft.Extensions.Hosting;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Jailer.Models;
-using Jailer.Services;
 
 namespace Jailer.Services
 {
@@ -25,7 +21,7 @@ namespace Jailer.Services
 
             // Manually providing dependencies for LogMonitorService since we are avoiding DI in Program.cs
             var optionsWrapper = Microsoft.Extensions.Options.Options.Create(jailerOptions);
-            _logMonitor = new LogMonitorService(optionsWrapper, _iptablesService);
+            _logMonitor = new LogMonitorService(optionsWrapper);
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
@@ -50,6 +46,17 @@ namespace Jailer.Services
 
             try
             {
+                // when we start up lets clean up any left over
+                await _iptablesService.CleanupAllJailsAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Failed to clean up preexisting rules");
+            }
+
+            try
+            {
+
                 while (!ct.IsCancellationRequested)
                 {
                     var logTask = logTimer.WaitForNextTickAsync(ct).AsTask();
@@ -86,7 +93,7 @@ namespace Jailer.Services
             {
                 if (!await _iptablesService.IsJailedAsync(ip))
                 {
-                    _logger.Information("Jailing IP: {IP} due to log violation.", ip);
+                    _logger.Information("Jailing IP: {0} due to log violation.", ip);
                     await _iptablesService.JailAsync(ip);
                 }
             }
@@ -99,7 +106,7 @@ namespace Jailer.Services
 
             foreach (var ip in expiredIps)
             {
-                _logger.Information("Unjailing IP: {IP} - expiration reached.", ip);
+                _logger.Information("Unjailing IP: {0} - expiration reached.", ip);
                 await _iptablesService.UnjailAsync(ip);
             }
         }
