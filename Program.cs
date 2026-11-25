@@ -1,7 +1,9 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Jailer.Services;
 using Microsoft.Extensions.Hosting;
 using Jailer;
+using Jailer.Models;
 
 var logger = new Logger(null);
 
@@ -12,9 +14,11 @@ try
     var builder = new HostBuilder()
         .ConfigureAppConfiguration((hostingContext, config) =>
         {
+            config.AddJsonFile("jails.json", optional: true, reloadOnChange: false);
         })
         .ConfigureServices((hostContext, services) =>
         {
+            services.Configure<JailerOptions>(hostContext.Configuration);
             services.AddSingleton<IHostedService, HostService>();
         });
 

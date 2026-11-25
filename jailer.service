@@ -1,0 +1,7 @@
+[Unit]
+Description=Jailer Service - bans ip address
+[Service]
+Type=simple
+ExecStart=/opt/Jailer
+[Install]
+WantedBy=multi-user.target

@@ -11,6 +11,7 @@ namespace Jailer.Services
         private readonly ILogMonitorService _logMonitor;
         private CancellationTokenSource? _cts;
         private Task? _backgroundTask;
+        private Task? _monitorTask;
 
         public HostService(Microsoft.Extensions.Options.IOptions<JailerOptions> options)
         {
@@ -29,6 +30,9 @@ namespace Jailer.Services
             _logger.Information("Starting up...");
 
             _cts = new CancellationTokenSource();
+
+            // Start log monitoring in a separate task so we don't block startup
+            _monitorTask = _logMonitor.StartMonitoringAsync(_cts.Token);
 
             // Start the background loop in a separate task so we don't block startup
             _backgroundTask = RunMainLoopAsync(_cts.Token);
@@ -51,7 +55,7 @@ namespace Jailer.Services
             }
             catch (Exception ex)
             {
-                _logger.Error("Failed to clean up preexisting rules");
+                _logger.Error("Failed to clean up preexisting rules: {0}", ex.Message);
             }
 
             try
@@ -120,10 +124,11 @@ namespace Jailer.Services
                 _cts.Cancel();
                 try
                 {
-                    // Wait for the background task to complete gracefully
-                    if (_backgroundTask != null)
+                    // Wait for the background tasks to complete gracefully
+                    var pendingTasks = new[] { _backgroundTask, _monitorTask }.Where(t => t != null).Cast<Task>().ToList();
+                    if (pendingTasks.Count > 0)
                     {
-                        await Task.WhenAny(_backgroundTask, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken));
+                        await Task.WhenAny(Task.WhenAll(pendingTasks), Task.Delay(TimeSpan.FromSeconds(5), cancellationToken));
                     }
                 }
                 catch (Exception ex)

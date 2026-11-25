@@ -47,7 +47,11 @@ namespace Jailer.Services
             return await Task.FromResult(expiredIps);
         }
 
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        protected override Task ExecuteAsync(CancellationToken stoppingToken) => StartMonitoringCore(stoppingToken);
+
+        public Task StartMonitoringAsync(CancellationToken ct) => StartMonitoringCore(ct);
+
+        private async Task StartMonitoringCore(CancellationToken ct)
         {
             if (_options.Jails == null || _options.Jails.Count == 0)
             {
@@ -55,7 +59,7 @@ namespace Jailer.Services
                 return;
             }
 
-            var monitorTasks = _options.Jails.Select(jail => MonitorLogFileAsync(jail, stoppingToken));
+            var monitorTasks = _options.Jails.Select(jail => MonitorLogFileAsync(jail, ct));
             await Task.WhenAll(monitorTasks);
         }
 
@@ -162,6 +166,6 @@ namespace Jailer.Services
             await Task.CompletedTask;
         }
 
-        public TimeSpan JailDuration => TimeSpan.FromSeconds(_options.JailDurationSeconds);
+        public TimeSpan JailDuration => TimeSpan.FromMinutes(1);
     }
 }
