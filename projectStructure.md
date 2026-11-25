@@ -1,3 +1,0 @@
-This project is bootstrapped by Program.cs, this launches HostService.cs which then orchestrates all other services and provides a source of truth about the state of the application. all other services complete their jobs and report back to the HostService.cs
-
-Dependency injection is intentional avoided this project needs to be as small and as lightweight as possible. because of this a shrunk down Serilog like logging framework has been implemented in Logger.cs

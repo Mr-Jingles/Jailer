@@ -1,0 +1,1 @@
+This is a reimplementation of fail2ban in c# designed to be lighter and have less external dependencies.

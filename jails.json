@@ -4,8 +4,15 @@
             "name": "sshd",
             "regex": "^(?:[])?\\s*(?:<[^.]+.[^.]+>\\s+)?(?:\\S+\\s+)?(?:kernel:\\s?[ *\\d+.\\d+]:?\\s+)?(?:@vserver_\\S+\\s+)?(?:(?:(?:[\\d+])?:\\s+[[(]?sshd(?:(\\S+))?[])]?:?|[[(]?sshd(?:(\\S+))?[])]?:?(?:[\\d+])?:?)\\s+)?(?:[ID \\d+ \\S+]\\s+)?Connection closed by authenticating user .+ port \\d+ [preauth]$",
             "attempts": "3",
-            "banTime": "3600",
+            "banTime": "360",
             "logFile": "/var/log/auth.log"
+        },
+        {
+            "name": "test",
+            "regex": "Test.*",
+            "attempts": "2",
+            "banTime": "1",
+            "logFile": "./fakelogfile.log"
         }
     ]
 

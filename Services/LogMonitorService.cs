@@ -61,18 +61,18 @@ namespace Jailer.Services
 
         private async Task MonitorLogFileAsync(JailRule rule, CancellationToken ct)
         {
-            _logger.Information("Starting monitoring for jail: {0} on file: {1}", rule.Name, rule.LogFilePath);
+            _logger.Information("Starting monitoring for jail: {0} on file: {1}", rule.Name, rule.LogFile);
             var ipAttempts = new Dictionary<string, int>();
 
             try
             {
-                while (!File.Exists(rule.LogFilePath) && !ct.IsCancellationRequested)
+                while (!File.Exists(rule.LogFile) && !ct.IsCancellationRequested)
                 {
-                    _logger.Debug("Waiting for log file to appear: {0}", rule.LogFilePath);
+                    _logger.Debug("Waiting for log file to appear: {0}", rule.LogFile);
                     await Task.Delay(5000, ct).ContinueWith(_ => { });
                 }
 
-                using var fs = new FileStream(rule.LogFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var fs = new FileStream(rule.LogFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 using var reader = new StreamReader(fs);
                 fs.Seek(0, SeekOrigin.End);
 
@@ -85,7 +85,7 @@ namespace Jailer.Services
                         continue;
                     }
 
-                    Match ipMatch = Regex.Match(line, rule.RegexPattern);
+                    Match ipMatch = Regex.Match(line, rule.Regex);
                     if (ipMatch.Success)
                     {
                         string? ip = ipMatch.Value;
@@ -112,9 +112,9 @@ namespace Jailer.Services
 
             count++;
             ipAttempts[ip] = count;
-            _logger.Debug("IP {0} matched pattern in jail {1}. Count: {2}/{3}", ip, rule.Name, count, rule.MatchThreshold);
+            _logger.Debug("IP {0} matched pattern in jail {1}. Count: {2}/{3}", ip, rule.Name, count, rule.Attempts);
 
-            if (count >= rule.MatchThreshold)
+            if (count >= rule.Attempts)
             {
                 lock (_lock)
                 {
@@ -140,11 +140,14 @@ namespace Jailer.Services
             await Task.CompletedTask;
         }
 
-        public void MarkAsJailed(string ip)
+        public void MarkAsJailed(string ip) => MarkAsJailed(ip, null);
+
+        public void MarkAsJailed(string ip, JailRule? rule)
         {
+            var duration = rule?.BanTime > 0 ? TimeSpan.FromMinutes(rule.BanTime) : JailDuration;
             lock (_lock)
             {
-                _jailedIps[ip] = DateTime.UtcNow.Add(JailDuration);
+                _jailedIps[ip] = DateTime.UtcNow.Add(duration);
             }
             _logger.Information("IP {0} has been marked as jailed until {1}", ip, _jailedIps[ip]);
         }

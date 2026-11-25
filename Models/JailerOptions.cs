@@ -11,10 +11,11 @@ public class JailerOptions
 public class JailRule
 {
     public string Name { get; set; } = string.Empty;
-    public string LogFilePath { get; set; } = string.Empty;
-    public string RegexPattern { get; set; } = string.Empty;
-    public int MatchThreshold { get; set; }
-    public int JailDurationMinutes { get; set; }
+    public string LogFile { get; set; } = string.Empty;
+    public string Regex { get; set; } = string.Empty;
+    public int Attempts { get; set; }
+    /// <summary>Ban duration in minutes (e.g. 360).</summary>
+    public int BanTime { get; set; }
 }
 
 public class IptablesSettings
