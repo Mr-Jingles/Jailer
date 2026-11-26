@@ -132,13 +132,12 @@ Check("unknown %(...)s variables become wildcards",
     Fail2BanFilter.Compile(@"^.*%(md5hex)s from .*$").IsMatch(sshdLine));
 
 // The real multi-line sshd filter from jails.json must compile and match typical auth.log lines.
-var sshdFilter = @"^%(__prefix_line)s(?:error: PAM: )?[aA]uthentication (?:failure|error) for .* from <HOST>( via \S+)?\s*$
-^%(__prefix_line)sFailed \S+ for .*? from <HOST>(?: port \d*)?(?: ssh\d*)?\s*$
-^%(__prefix_line)s[iI
-    ](?:llegal|nvalid) user .* from <HOST>\s*$";
+var sshdFilter = "^%(__prefix_line)s(?:error: PAM: )?[aA]uthentication (?:failure|error) for .*? from <HOST>( via \\S+)?(?: port \\d*)?(?: ssh\\d*)?\\s*$\n^%(__prefix_line)s(?:error: PAM: )?User not known to the underlying authentication module for .* from <HOST>\\s*$\n^%(__prefix_line)sFailed \\S+ for .*? from <HOST>(?: port \\d*)?(?: ssh\\d*)?(: (ruser .*|(\\S+ ID \\S+ \\(serial \\d+\\) CA )?\\S+ %(__md5hex)s(, client user \".*\", client host \".*\")?))?\\s*$\n^%(__prefix_line)sROOT LOGIN REFUSED.* FROM <HOST>(?:\\s+\\S+)?\\s*$\n^%(__prefix_line)s[iI\n](?:llegal|nvalid) user .* from <HOST>(?: port \\d*)?\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because not listed in AllowUsers\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because listed in DenyUsers\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because not in any group\\s*$\n^%(__prefix_line)srefused connect from \\S+ \\(<HOST>\\)\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because a group is listed in DenyGroups\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because none of user's groups are listed in AllowGroups\\s*$";
 var compiledSshd = Fail2BanFilter.Compile(sshdFilter); // throws if invalid
 Check("multi-line sshd filter compiles", compiledSshd is not null);
 var sshdRegex = compiledSshd!;
+//remove this console writeline once tester is working again
+Console.WriteLine("sshdRegex is " + sshdRegex);
 Check("sshd filter matches 'Failed password' line", sshdRegex.IsMatch(sshdLine));
 Check("sshd filter matches 'Invalid user' line (bracket class spans two lines)",
     sshdRegex.IsMatch("Jan 15 10:24:01 myhost sshd[99]: Invalid user bob from 203.0.113.7 port 443"));

@@ -25,11 +25,13 @@ namespace Jailer.Services
         // fail2ban's __prefix_line is "month day time host" — but real syslog lines carry the
         // program tag after the hostname ("Jan 15 10:23:45 myhost sshd[123]: Failed ..."), so we
         // match the timestamp and then let a lazy run of 'token' consume whatever host/tag tokens
-        // precede the message. Each token may be followed by whitespace (so filters that start
-        // with their own literal space still work) or, when it is the last prefix token, by an
-        // optional ':'. The laziness guarantees we stop as early as the filter allows.
+        // precede the message. Each token is followed by its trailing whitespace (consumed, so
+        // filters that start with their own literal space still work); the ':' after a tag such as
+        // "sshd[123]:" is part of the token itself (\S). The laziness guarantees we stop as early
+        // as the filter allows. Each iteration consumes at least one non-space character, so the
+        // repetition cannot backtrack exponentially.
         private const string PrefixLinePattern =
-            @"(?:\S+\s+\d{1,2}\s+\d{1,2}:\d{2}:\d{2}\s+)(?:\S+(?=\s|:)|\S+$)*?";
+            @"(?:\S+\s+\d{1,2}\s+\d{1,2}:\d{2}:\d{2}\s+)(?:\S+:?\s+|\S+$)*?";
 
         private static readonly Regex VariableRegex = new(@"%\((?<name>[A-Za-z_][A-Za-z0-9_]*)\)s", RegexOptions.Compiled);
         private static readonly Regex HostPlaceholderRegex = new(@"<HOST>", RegexOptions.Compiled);
