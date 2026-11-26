@@ -127,7 +127,6 @@ namespace Jailer.Services
 
         private async Task CheckLogsAndJailAsync()
         {
-            _logger.Debug("Checking logs for new IPs to jail...");
             var violatedIps = _logMonitor.GetViolatedIps();
 
             foreach (var ip in violatedIps)
@@ -166,7 +165,6 @@ namespace Jailer.Services
 
         private async Task CleanupExpiredJailsAsync()
         {
-            _logger.Debug("Checking for expired jail entries to remove...");
             var expiredIps = await _logMonitor.GetExpiredIpsAsync();
 
             var unjailedAny = false;
