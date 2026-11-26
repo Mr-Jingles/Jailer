@@ -4,15 +4,15 @@
             "name": "sshd",
             "regex": "^%(__prefix_line)s(?:error: PAM: )?[aA]uthentication (?:failure|error) for .*? from <HOST>( via \\S+)?(?: port \\d*)?(?: ssh\\d*)?\\s*$\n^%(__prefix_line)s(?:error: PAM: )?User not known to the underlying authentication module for .* from <HOST>\\s*$\n^%(__prefix_line)sFailed \\S+ for .*? from <HOST>(?: port \\d*)?(?: ssh\\d*)?(: (ruser .*|(\\S+ ID \\S+ \\(serial \\d+\\) CA )?\\S+ %(__md5hex)s(, client user \".*\", client host \".*\")?))?\\s*$\n^%(__prefix_line)sROOT LOGIN REFUSED.* FROM <HOST>(?:\\s+\\S+)?\\s*$\n^%(__prefix_line)s[iI](?:llegal|nvalid) user .* from <HOST>(?: port \\d*)?\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because not listed in AllowUsers\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because listed in DenyUsers\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because not in any group\\s*$\n^%(__prefix_line)srefused connect from \\S+ \\(<HOST>\\)\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because a group is listed in DenyGroups\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because none of user's groups are listed in AllowGroups\\s*$",
             "attempts": 3,
-            "banTime": 360,
+            "banTime": 180,
             "logFile": "/var/log/auth.log"
         },
         {
-            "name": "test",
-            "regex": "Test.*",
+            "name": "ovpn",
+            "regex": "^(.*) TLS Error: incoming packet authentication failed from \\[AF_INET\\]<HOST>:\\d+$\n^(.*) <HOST>:\\d+ Connection reset, restarting\n^(.*) <HOST>:\\d+ TLS Auth Error\n^ (.*) <HOST>:\\d+ TLS Error: TLS handshake failed$\n^(.*) <HOST>:\\d+ VERIFY ERROR\n^(.*) <HOST>:\\d+ TLS Error: TLS key negotiation failed to occur within 60 seconds.*$\n^(.*)ovpn(.*)cannot locate HMAC in incoming packet from (.*)$",
             "attempts": 2,
-            "banTime": 1,
-            "logFile": "./fakelogfile.log"
+            "banTime": 180,
+            "logFile": "/var/log/syslog"
         }
     ]
 }
