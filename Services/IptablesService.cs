@@ -129,7 +129,7 @@ public sealed class IptablesService : IIptablesService
             "-I", iptables.Chain,
             "-s", ip,
             "-m", "comment", "--comment", BuildComment(ip),
-            iptables.RuleTarget,
+            "-j", iptables.RuleTarget,
         }, cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
@@ -159,7 +159,7 @@ public sealed class IptablesService : IIptablesService
             "-D", iptables.Chain,
             "-s", ip,
             "-m", "comment", "--comment", BuildComment(ip),
-            iptables.RuleTarget,
+            "-j", iptables.RuleTarget,
         }, cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
