@@ -64,9 +64,17 @@ namespace Jailer.Services
             var translated = VariableRegex.Replace(line, match =>
             {
                 var name = match.Groups["name"].Value;
-                // The prefix may stop mid-token (see PrefixLinePattern), so the space that would
-                // normally separate it from the rest of the filter becomes optional.
-                return name == "__prefix_line" ? PrefixLinePattern + @"\s*" : ".*?";
+                var sep = match.Groups["sep"];
+
+                if (name != "__prefix_line")
+                {
+                    // Unknown fail2ban variable: wildcard, keeping any separator whitespace.
+                    return ".*?" + (sep.Success ? sep.Value : string.Empty);
+                }
+
+                // The prefix may stop mid-token (see PrefixLinePattern), so when the filter put a
+                // space after it that separator becomes optional instead of literal.
+                return PrefixLinePattern + (sep.Success ? @"\s*" : string.Empty);
             });
 
             return HostPlaceholderRegex.Replace(translated, HostPattern);
