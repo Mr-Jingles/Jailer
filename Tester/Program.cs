@@ -296,6 +296,80 @@ Check("ovpn filter rejects unrelated syslog lines",
 Check("extracts IP from 'cannot locate HMAC' line", Extract(ovpnHmacLine) == "159.65.199.132");
 Check("extracts IP from 'authentication failed' line", Extract(ovpnAuthLine) == "106.75.175.85");
 
+// ---------------------------------------------------------------------------
+// Part I: iptables rule syntax — the exact argument lists JailAsync/UnjailAsync
+// hand to iptables must be valid per the v1.8.7 usage output (the "Bad argument
+// 'DROP'" regression): the target may only appear after -j, never as a bare
+// positional token. A fake ICommandRunner captures what would actually run.
+// ---------------------------------------------------------------------------
+var incidentIp = "61.177.197.82";
+
+// iptables v1.8.7 usage: [options] command [parameters]. The target is only a
+// valid parameter after -j; a bare positional target (e.g. trailing "DROP") is
+// rejected with exit 2 — the exact failure in serveroutput.txt.
+var jailRuleRe = new Regex(
+    @"^iptables -I INPUT -s \d{1,3}(?:\.\d{1,3}){3} -m comment --comment jailer:\d{1,3}(?:\.\d{1,3}){3} -j DROP$");
+var unjailRuleRe = new Regex(
+    @"^iptables -D INPUT -s \d{1,3}(?:\.\d{1,3}){3} -m comment --comment jailer:\d{1,3}(?:\.\d{1,3}){3} -j DROP$");
+
+// Scenario 1: IP not yet jailed -> JailAsync must issue the insert rule.
+var runnerJail = new CapturingCommandRunner(existingJailedIp: null);
+var svcJail = new IptablesService(runnerJail);
+var jailOk = await svcJail.JailAsync(incidentIp);
+Check("JailAsync succeeds when IP is not yet jailed", jailOk);
+var jailRule = runnerJail.Invocations.LastOrDefault(i => i.Contains("-I INPUT", StringComparison.Ordinal));
+Check($"jail rule follows iptables v1.8.7 usage (target after -j): {jailRule ?? "no -I invocation captured"}",
+    jailRuleRe.IsMatch(jailRule ?? string.Empty));
+
+// Scenario 2: IP already jailed -> UnjailAsync must issue the delete rule.
+var runnerUnjail = new CapturingCommandRunner(existingJailedIp: incidentIp);
+var svcUnjail = new IptablesService(runnerUnjail);
+var unjailOk = await svcUnjail.UnjailAsync(incidentIp);
+Check("UnjailAsync succeeds when IP is jailed", unjailOk);
+var unjailRule = runnerUnjail.Invocations.LastOrDefault(i => i.Contains("-D INPUT", StringComparison.Ordinal));
+Check($"unjail rule follows iptables v1.8.7 usage (target after -j): {unjailRule ?? "no -D invocation captured"}",
+    unjailRuleRe.IsMatch(unjailRule ?? string.Empty));
+
+// Guard against the original regression shape: no invocation may carry a bare
+// positional target token anywhere in its argument list.
+var bareTarget = runnerJail.Invocations.Concat(runnerUnjail.Invocations)
+    .Where(i => i.Contains("-I INPUT", StringComparison.Ordinal) || i.Contains("-D INPUT", StringComparison.Ordinal))
+    .Any(i => Regex.IsMatch(i, @"(?<!-j )DROP"));
+Check("no iptables invocation uses a bare positional DROP target", !bareTarget);
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
 return failures;
+
+// Fake ICommandRunner for Part I: records every invocation it would run and
+// answers the `iptables -S INPUT` guard call with a canned chain listing.
+sealed class CapturingCommandRunner : ICommandRunner
+{
+    public List<string> Invocations { get; } = new();
+    private readonly string _listOutput;
+
+    // Simulates `iptables -S INPUT` output: an empty chain, or a chain that
+    // already holds Jailer's rule for the given IP.
+    public CapturingCommandRunner(string? existingJailedIp)
+    {
+        if (existingJailedIp is null)
+        {
+            _listOutput = string.Empty;
+        }
+        else
+        {
+            _listOutput = $"-P INPUT ACCEPT\n-I INPUT -s {existingJailedIp} -m comment --comment jailer:{existingJailedIp} -j DROP\n";
+        }
+    }
+
+    public Task<CommandResult> RunAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken = default)
+    {
+        var args = arguments.ToList();
+        Invocations.Add(fileName + " " + string.Join(' ', args));
+        if (args.Count >= 2 && args[0] == "-S" && args[1] == "INPUT")
+        {
+            return Task.FromResult(new CommandResult(0, _listOutput, string.Empty));
+        }
+        return Task.FromResult(new CommandResult(0, string.Empty, string.Empty));
+    }
+}
