@@ -273,6 +273,29 @@ try { await monitorTaskG; } catch (OperationCanceledException) { }
 Directory.Delete(dirG, recursive: true);
 LogMonitorService.AttemptWindow = originalWindow;
 
+// ---------------------------------------------------------------------------
+// Part H: ovpn filter — the real multi-line regex from jails.json must compile,
+// match the actual OpenVPN syslog lines, and reject the
+// IP-less HMAC error line (nothing to ban).
+// ---------------------------------------------------------------------------
+var ovpnFilter = "^%(__prefix_line)sTLS Error: cannot locate HMAC in incoming packet from \\[AF_INET\\]<HOST>:\\d+\\s*$\n^%(__prefix_line)sTLS Error: incoming packet authentication failed from \\[AF_INET\\]<HOST>:\\d+\\s*$";
+var ovpnRegex = Fail2BanFilter.Compile(ovpnFilter)!; // throws if invalid
+Check("multi-line ovpn filter compiles", ovpnRegex is not null);
+
+var ovpnHmacLine = "Nov 22 03:12:11 vmi1000953 ovpn-myserver[695]: TLS Error: cannot locate HMAC in incoming packet from [AF_INET]159.65.199.132:37973";
+var ovpnAuthLine = "Nov 22 19:03:10 vmi1000953 ovpn-myserver[695]: TLS Error: incoming packet authentication failed from [AF_INET]106.75.175.85:58914";
+var ovpnNoIpLine = "Nov 22 19:03:10 vmi1000953 ovpn-myserver[695]: Authenticate/Decrypt packet error: packet HMAC authentication failed";
+
+Check("ovpn filter matches 'cannot locate HMAC' line", ovpnRegex.IsMatch(ovpnHmacLine));
+Check("ovpn filter matches 'incoming packet authentication failed' line", ovpnRegex.IsMatch(ovpnAuthLine));
+Check("ovpn filter rejects the IP-less HMAC error line (nothing to ban)", !ovpnRegex.IsMatch(ovpnNoIpLine));
+Check("ovpn filter rejects unrelated syslog lines",
+    !ovpnRegex.IsMatch("Nov 22 19:03:10 vmi1000953 CRON[7]: pam_unix(cron:session): session opened for user root"));
+
+// The offending IP must be extractable from the matched line.
+Check("extracts IP from 'cannot locate HMAC' line", Extract(ovpnHmacLine) == "159.65.199.132");
+Check("extracts IP from 'authentication failed' line", Extract(ovpnAuthLine) == "106.75.175.85");
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
 return failures;

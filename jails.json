@@ -9,7 +9,7 @@
         },
         {
             "name": "ovpn",
-            "regex": "^(.*) TLS Error: incoming packet authentication failed from \\[AF_INET\\]<HOST>:\\d+$\n^(.*) <HOST>:\\d+ Connection reset, restarting\n^(.*) <HOST>:\\d+ TLS Auth Error\n^ (.*) <HOST>:\\d+ TLS Error: TLS handshake failed$\n^(.*) <HOST>:\\d+ VERIFY ERROR\n^(.*) <HOST>:\\d+ TLS Error: TLS key negotiation failed to occur within 60 seconds.*$\n^(.*)ovpn(.*)cannot locate HMAC in incoming packet from (.*)$",
+            "regex": "^%(__prefix_line)sTLS Error: cannot locate HMAC in incoming packet from \\[AF_INET\\]<HOST>:\\d+\\s*$\n^%(__prefix_line)sTLS Error: incoming packet authentication failed from \\[AF_INET\\]<HOST>:\\d+\\s*$",
             "attempts": 2,
             "banTime": 180,
             "logFile": "/var/log/syslog"
