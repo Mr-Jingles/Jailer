@@ -25,6 +25,24 @@ namespace Jailer.Services
             // Manually providing dependencies for LogMonitorService since we are avoiding DI in Program.cs
             var optionsWrapper = Microsoft.Extensions.Options.Options.Create(jailerOptions);
             _logMonitor = new LogMonitorService(optionsWrapper);
+
+            // Jail the IP as soon as a violation is detected instead of waiting up to a minute
+            // for the periodic check. The callback runs on the monitor's read loop, so run the
+            // (async) jail work detached and keep any failure out of the log-reading path.
+            _logMonitor.ViolationDetected = (ip, rule) =>
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await JailIpAsync(ip, rule);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error("Failed to jail IP {0}: {1}", ip, ex.Message);
+                    }
+                });
+            };
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
@@ -72,7 +90,8 @@ namespace Jailer.Services
 
         private async Task RunLogCheckLoopAsync(CancellationToken ct)
         {
-            // Check for new violations every minute.
+            // Safety net: the ViolationDetected callback already jails IPs immediately, so this
+            // only picks up anything that was missed (e.g. a transient iptables failure).
             using var logTimer = new PeriodicTimer(TimeSpan.FromMinutes(1));
 
             try
@@ -113,17 +132,26 @@ namespace Jailer.Services
 
             foreach (var ip in violatedIps)
             {
-                if (!await _iptablesService.IsJailedAsync(ip))
-                {
-                    _logger.Information("Jailing IP: {0} due to log violation.", ip);
-                    var jailed = await _iptablesService.JailAsync(ip);
+                await JailIpAsync(ip, ruleForIp(ip));
+            }
+        }
 
-                    // Record the expiration so the cleanup loop can release it later.
-                    if (jailed)
-                    {
-                        _logMonitor.MarkAsJailed(ip, ruleForIp(ip));
-                    }
-                }
+        /// <summary>Jails an IP if it is not already blocked, records the expiry, and prints the jail state.</summary>
+        private async Task JailIpAsync(string ip, Jailer.Models.JailRule? rule)
+        {
+            if (await _iptablesService.IsJailedAsync(ip))
+            {
+                return;
+            }
+
+            _logger.Information("Jailing IP: {0} due to log violation.", ip);
+            var jailed = await _iptablesService.JailAsync(ip);
+
+            // Record the expiration so the cleanup loop can release it later.
+            if (jailed)
+            {
+                _logMonitor.MarkAsJailed(ip, rule ?? ruleForIp(ip));
+                PrintJailState();
             }
         }
 
@@ -141,10 +169,51 @@ namespace Jailer.Services
             _logger.Debug("Checking for expired jail entries to remove...");
             var expiredIps = await _logMonitor.GetExpiredIpsAsync();
 
-            foreach (var ip in expiredIps)
+            var unjailedAny = false;
+            foreach (var entry in expiredIps.DistinctBy(e => e.Ip))
             {
-                _logger.Information("Unjailing IP: {0} - expiration reached.", ip);
-                await _iptablesService.UnjailAsync(ip);
+                _logger.Information("Unjailing IP: {0} - expiration reached.", entry.Ip);
+                if (await _iptablesService.UnjailAsync(entry.Ip))
+                {
+                    unjailedAny = true;
+                }
+            }
+
+            if (unjailedAny)
+            {
+                PrintJailState();
+            }
+        }
+
+        /// <summary>
+        /// Prints the current state of every configured jail, e.g.:
+        ///   sshd
+        ///     10.20.30.40  59 mins
+        ///   test
+        ///     empty
+        /// </summary>
+        private void PrintJailState()
+        {
+            var state = _logMonitor.GetJailState();
+            var now = DateTime.UtcNow;
+
+            foreach (var jail in _options.Jails)
+            {
+                Console.WriteLine(jail.Name);
+
+                if (state.TryGetValue(jail.Name, out var entries) && entries.Count > 0)
+                {
+                    foreach (var (ip, expiresUtc) in entries.OrderBy(e => e.Ip, StringComparer.OrdinalIgnoreCase))
+                    {
+                        // At least one minute while the ban is still active.
+                        var minutes = Math.Max(1, (int)Math.Ceiling((expiresUtc - now).TotalMinutes));
+                        Console.WriteLine($"  {ip}  {minutes} mins");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("  empty");
+                }
             }
         }
 

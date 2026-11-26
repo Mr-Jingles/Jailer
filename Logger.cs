@@ -4,6 +4,9 @@ namespace Jailer
 {
     public static class Log
     {
+        /// <summary>When set, all log output is routed here instead of the console (used by tests).</summary>
+        public static Action<string>? DefaultSink { get; set; }
+
         public static Logger ForContext<T>()
         {
             var logger = new Logger(typeof(T).Name);
@@ -32,25 +35,31 @@ namespace Jailer
             _context = context;
         }
 
-        public void Debug(string message, params object[] data)
+        private static void Write(string output, bool isError = false)
         {
-            Console.WriteLine(processMessage(message, data));
+            if (Log.DefaultSink != null)
+            {
+                Log.DefaultSink(output);
+                return;
+            }
+
+            if (isError)
+            {
+                Console.Error.WriteLine(output);
+            }
+            else
+            {
+                Console.WriteLine(output);
+            }
         }
 
-        public void Information(string message, params object[] data)
-        {
-            Console.WriteLine(processMessage(message, data));
-        }
+        public void Debug(string message, params object[] data) => Write(processMessage(message, data));
 
-        public void Warning(string message, params object[] data)
-        {
-            Console.WriteLine(processMessage(message, data));
-        }
+        public void Information(string message, params object[] data) => Write(processMessage(message, data));
 
-        public void Error(string message, params object[] data)
-        {
-            Console.Error.WriteLine(processMessage(message, data));
-        }
+        public void Warning(string message, params object[] data) => Write(processMessage(message, data));
+
+        public void Error(string message, params object[] data) => Write(processMessage(message, data), isError: true);
 
         private string processMessage(string message, params object[] data)
         {

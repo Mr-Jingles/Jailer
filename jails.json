@@ -2,18 +2,7 @@
     "jails": [
         {
             "name": "sshd",
-            "regex": "^%(__prefix_line)s(?:error: PAM: )?[aA]uthentication (?:failure|error) for .* from <HOST>( via \S+)?\s*$
-        ^%(__prefix_line)s(?:error: PAM: )?User not known to the underlying authentication module for .* from <HOST>\s*$
-        ^%(__prefix_line)sFailed \S+ for .*? from <HOST>(?: port \d*)?(?: ssh\d*)?(: (ruser .*|(\S+ ID \S+ \(serial \d+\) CA )?\S+ %(__md5hex)s(, client user ".*", client host ".*")?))?\s*$
-        ^%(__prefix_line)sROOT LOGIN REFUSED.* FROM <HOST>\s*$
-        ^%(__prefix_line)s[iI
-            ](?:llegal|nvalid) user .* from <HOST>\s*$
-        ^%(__prefix_line)sUser .+ from <HOST> not allowed because not listed in AllowUsers\s*$
-        ^%(__prefix_line)sUser .+ from <HOST> not allowed because listed in DenyUsers\s*$
-        ^%(__prefix_line)sUser .+ from <HOST> not allowed because not in any group\s*$
-        ^%(__prefix_line)srefused connect from \S+ \(<HOST>\)\s*$
-        ^%(__prefix_line)sUser .+ from <HOST> not allowed because a group is listed in DenyGroups\s*$
-        ^%(__prefix_line)sUser .+ from <HOST> not allowed because none of user's groups are listed in AllowGroups\s*$",
+            "regex": "^%(__prefix_line)s(?:error: PAM: )?[aA]uthentication (?:failure|error) for .*? from <HOST>( via \\S+)?(?: port \\d*)?(?: ssh\\d*)?\\s*$\n^%(__prefix_line)s(?:error: PAM: )?User not known to the underlying authentication module for .* from <HOST>\\s*$\n^%(__prefix_line)sFailed \\S+ for .*? from <HOST>(?: port \\d*)?(?: ssh\\d*)?(: (ruser .*|(\\S+ ID \\S+ \\(serial \\d+\\) CA )?\\S+ %(__md5hex)s(, client user \".*\", client host \".*\")?))?\\s*$\n^%(__prefix_line)sROOT LOGIN REFUSED.* FROM <HOST>(?:\\s+\\S+)?\\s*$\n^%(__prefix_line)s[iI\n](?:llegal|nvalid) user .* from <HOST>(?: port \\d*)?\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because not listed in AllowUsers\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because listed in DenyUsers\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because not in any group\\s*$\n^%(__prefix_line)srefused connect from \\S+ \\(<HOST>\\)\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because a group is listed in DenyGroups\\s*$\n^%(__prefix_line)sUser .+ from <HOST> not allowed because none of user's groups are listed in AllowGroups\\s*$",
             "attempts": 3,
             "banTime": 360,
             "logFile": "/var/log/auth.log"
