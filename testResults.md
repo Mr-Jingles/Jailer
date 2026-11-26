@@ -1,2 +1,3 @@
+1. README.md needs updating to reflect what this project is, should include that its similar to fail2ban, a small section on how to build and deploy the solution, what its limitations are, its license (MIT license), some example output. this README should have a sensible look and feel, the README.md should state this was built with qwen3.8
 
-- README.md needs updating to reflect what this project is, should include that its similar to fail2ban, a small section on how to build and deploy the solution, what its limitations are, its license (MIT license), some example output. this README should have a sensible look and feel
+1. 1 Test still fails in tester it likely just needs a small change to PrefixLinePattern

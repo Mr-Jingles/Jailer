@@ -30,10 +30,17 @@ namespace Jailer.Services
         // "sshd[123]:" is part of the token itself (\S). The laziness guarantees we stop as early
         // as the filter allows. Each iteration consumes at least one non-space character, so the
         // repetition cannot backtrack exponentially.
+        //
+        // A token may also be the final one on the line: when the rest of the filter starts with
+        // a partial token (e.g. "sshd\[1\]:" after "%(__prefix_line)s "), the run must be able to
+        // stop right before that last token, so each iteration accepts trailing whitespace OR end
+        // of line ("(?:\s+|$)").
         private const string PrefixLinePattern =
-            @"(?:\S+\s+\d{1,2}\s+\d{1,2}:\d{2}:\d{2}\s+)(?:\S+:?\s+|\S+$)*?";
+            @"(?:\S+\s+\d{1,2}\s+\d{1,2}:\d{2}:\d{2}\s+)(?:\S+:?(?:\s+|$))*?";
 
-        private static readonly Regex VariableRegex = new(@"%\((?<name>[A-Za-z_][A-Za-z0-9_]*)\)s", RegexOptions.Compiled);
+        // The optional trailing whitespace is captured so TranslateLine can decide whether the
+        // separator after a %(__prefix_line)s must stay literal or become optional.
+        private static readonly Regex VariableRegex = new(@"%\((?<name>[A-Za-z_][A-Za-z0-9_]*)\)s(?<sep>\s+)?", RegexOptions.Compiled);
         private static readonly Regex HostPlaceholderRegex = new(@"<HOST>", RegexOptions.Compiled);
 
         /// <summary>Translates a fail2ban-style filter into an equivalent .NET regex pattern.</summary>
@@ -57,7 +64,9 @@ namespace Jailer.Services
             var translated = VariableRegex.Replace(line, match =>
             {
                 var name = match.Groups["name"].Value;
-                return name == "__prefix_line" ? PrefixLinePattern : ".*?";
+                // The prefix may stop mid-token (see PrefixLinePattern), so the space that would
+                // normally separate it from the rest of the filter becomes optional.
+                return name == "__prefix_line" ? PrefixLinePattern + @"\s*" : ".*?";
             });
 
             return HostPlaceholderRegex.Replace(translated, HostPattern);
