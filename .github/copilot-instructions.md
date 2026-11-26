@@ -17,12 +17,12 @@ A small, single-binary .NET 8 reimplementation of fail2ban's core idea: tail log
 - **No dependency injection** other than to bootstrap between `Program.cs` and `HostService.cs`. Wire services manually; don't introduce DI containers or constructor-injected service graphs beyond that one hop.
 - **iptables only**, fixed to chain `INPUT`, target `DROP`. No nftables, no firewalld.
 - **No persistent state.** Bans live in memory plus iptables rules; a restart removes Jailer's own leftover rules by design.
-- **Tail-only log reading.** Don't add full-file scanning or rotation handling beyond what exists.
 - **24-hour attempt window is fixed** and not configurable per jail.
 
 ## Not yet implemented (open for work, not design constraints)
 
 - **IPv6 / `ip6tables` support.** Currently IPv4 only — this is a missing feature, not a forbidden direction; implementing it is fair game when asked.
+- **Tail-only log reading.** Adding file rotation handling is fair game provided it can be done without making the program too much larger or slower.
 
 ## Conventions
 
