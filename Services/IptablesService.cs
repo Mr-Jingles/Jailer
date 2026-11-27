@@ -192,13 +192,28 @@ public sealed class IptablesService : IIptablesService
                 continue;
             }
 
-            // Extract the IP from "-s <ip>" in this rule.
+            // Extract the IP from "-s <ip>" in this rule. iptables -S prints single-host
+            // sources with a netmask suffix (e.g. "123.60.139.156/32"), so strip it before
+            // parsing; without that, IPAddress.TryParse fails and every Jailer rule is
+            // invisible to IsJailedAsync (unjails no-op, duplicate jail rules get inserted).
             var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             for (var i = 0; i + 1 < parts.Length; i++)
             {
-                if (parts[i] == "-s" && System.Net.IPAddress.TryParse(parts[i + 1], out _))
+                if (parts[i] != "-s")
                 {
-                    ips.Add(parts[i + 1]);
+                    continue;
+                }
+
+                var candidate = parts[i + 1];
+                var slash = candidate.IndexOf('/');
+                if (slash > 0)
+                {
+                    candidate = candidate[..slash];
+                }
+
+                if (System.Net.IPAddress.TryParse(candidate, out _))
+                {
+                    ips.Add(candidate);
                     break;
                 }
             }

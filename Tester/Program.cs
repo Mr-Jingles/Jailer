@@ -301,6 +301,8 @@ Check("extracts IP from 'authentication failed' line", Extract(ovpnAuthLine) == 
 // hand to iptables must be valid per the v1.8.7 usage output (the "Bad argument
 // 'DROP'" regression): the target may only appear after -j, never as a bare
 // positional token. A fake ICommandRunner captures what would actually run.
+// Also covers the /32-suffix regression: real `iptables -S INPUT` prints single-host
+// sources as "-s 123.60.139.156/32", which must still be recognised by IsJailedAsync.
 // ---------------------------------------------------------------------------
 var incidentIp = "61.177.197.82";
 
@@ -337,6 +339,28 @@ var bareTarget = runnerJail.Invocations.Concat(runnerUnjail.Invocations)
     .Any(i => Regex.IsMatch(i, @"(?<!-j )DROP"));
 Check("no iptables invocation uses a bare positional DROP target", !bareTarget);
 
+// Scenario 3: the production incident. `iptables -S INPUT` on the server printed
+// single-host sources with a /32 suffix and quoted comments (see serverLogs.txt):
+//   -A INPUT -s 123.60.139.156/32 -m comment --comment "jailer:123.60.139.156" -j DROP
+// GetJailedIpsAsync must still recognise the IP, otherwise IsJailedAsync returns
+// false for a jailed IP and UnjailAsync no-ops ("is not currently jailed") while
+// JailAsync inserts duplicate rules.
+var runnerSlash = new CapturingCommandRunner(existingJailedIp: incidentIp, useNetmaskSuffix: true);
+var svcSlash = new IptablesService(runnerSlash);
+
+Check("IsJailedAsync recognises a rule listed as '-s <ip>/32'", await svcSlash.IsJailedAsync(incidentIp));
+var unjailOkSlash = await svcSlash.UnjailAsync(incidentIp);
+Check("UnjailAsync removes the rule instead of no-op'ing on '/32' listing", unjailOkSlash);
+var slashDeleteRule = runnerSlash.Invocations.LastOrDefault(i => i.Contains("-D INPUT", StringComparison.Ordinal));
+Check($"unjail delete rule is well-formed: {slashDeleteRule ?? "no -D invocation captured"}",
+    unjailRuleRe.IsMatch(slashDeleteRule ?? string.Empty));
+
+// And the guard must not double-insert when the chain already holds the IP.
+var runnerSlashJail = new CapturingCommandRunner(existingJailedIp: incidentIp, useNetmaskSuffix: true);
+var svcSlashJail = new IptablesService(runnerSlashJail);
+var jailOkSlash = await svcSlashJail.JailAsync(incidentIp);
+Check("JailAsync is a no-op when the IP already has a '/32'-listed rule", !jailOkSlash);
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
 return failures;
@@ -349,8 +373,10 @@ sealed class CapturingCommandRunner : ICommandRunner
     private readonly string _listOutput;
 
     // Simulates `iptables -S INPUT` output: an empty chain, or a chain that
-    // already holds Jailer's rule for the given IP.
-    public CapturingCommandRunner(string? existingJailedIp)
+    // already holds Jailer's rule for the given IP. With useNetmaskSuffix the
+    // listing matches real iptables 1.8.x output (single-host sources carry a
+    // /32 suffix and comments are quoted), which is what broke IsJailedAsync.
+    public CapturingCommandRunner(string? existingJailedIp, bool useNetmaskSuffix = false)
     {
         if (existingJailedIp is null)
         {
@@ -358,7 +384,9 @@ sealed class CapturingCommandRunner : ICommandRunner
         }
         else
         {
-            _listOutput = $"-P INPUT ACCEPT\n-I INPUT -s {existingJailedIp} -m comment --comment jailer:{existingJailedIp} -j DROP\n";
+            var source = useNetmaskSuffix ? $"{existingJailedIp}/32" : existingJailedIp;
+            var comment = useNetmaskSuffix ? $"\"jailer:{existingJailedIp}\"" : $"jailer:{existingJailedIp}";
+            _listOutput = $"-P INPUT ACCEPT\n-I INPUT -s {source} -m comment --comment {comment} -j DROP\n";
         }
     }
 
