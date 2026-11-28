@@ -103,7 +103,6 @@ test
 
 ## Limitations
 
-- **IPv4 only.** IPv6 addresses are neither extracted nor banned (no `ip6tables` support).
 - **iptables only.** No nftables or firewalld integration; the chain, target and executable are fixed to `INPUT` / `DROP`.
 - **No persistent state.** Bans live in memory plus iptables rules. On restart Jailer removes its own leftover rules — a ban does not survive a reboot unless your firewall persists them independently.
 - **Tail-only log reading.** Files are read from the end; if a file is rotated or truncated while running, monitoring of that jail stops until Jailer is restarted. Log rotation (e.g. `logrotate` with `copytruncate`) should be configured accordingly.

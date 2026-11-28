@@ -23,7 +23,6 @@ A small, single-binary .NET 8 reimplementation of fail2ban's core idea: tail log
 
 ## Not yet implemented (open for work, not design constraints)
 
-- **IPv6 / `ip6tables` support.** Currently IPv4 only — this is a missing feature, not a forbidden direction; implementing it is fair game when asked.
 - **Configurable iptables chain/target/executable.** `IptablesService` has an `IptablesOptions` class (defaults: `iptables` / `INPUT` / `DROP`) but the constructor hardcodes `_options = new IptablesOptions()` — nothing reads it from config yet. Note there is also a near-duplicate `IptablesSettings` in `Models/JailerOptions.cs`; consolidate if you touch this area.
 - **Tail-only log reading.** Adding file rotation handling is fair game provided it can be done without making the program too much larger or slower.
 

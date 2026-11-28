@@ -32,8 +32,11 @@ void Check(string name, bool condition)
 // ---------------------------------------------------------------------------
 // Part A: IP extraction — the same regex LogMonitorService uses.
 // ---------------------------------------------------------------------------
+var IPv4Pattern = @"\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b";
+var IPv6Pattern = @"\b(?:[a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}\b|\b(?:[a-fA-F0-9]{1,4}(?::[a-fA-F0-9]{1,4}){0,6}::(?:[a-fA-F0-9]{1,4}(?::[a-fA-F0-9]{1,4}){0,6})?|::(?:[a-fA-F0-9]{1,4}(?::[a-fA-F0-9]{1,4}){0,7}))\b";
+
 var ipRe = new Regex(
-    @"\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b",
+    $@"({IPv4Pattern}|{IPv6Pattern})",
     RegexOptions.Compiled);
 
 string? Extract(string line) => ipRe.Match(line).Success ? ipRe.Match(line).Value : null;
@@ -85,10 +88,7 @@ File.WriteAllText(logFile, string.Empty);
 
 var options = Options.Create(new JailerOptions
 {
-    Jails = new List<JailRule>
-    {
-        new() { Name = "test", LogFile = logFile, Regex = @"Test.*", Attempts = 2, BanTime = 1 }
-    }
+    Jails = new List<JailRule> { new() { Name = "test", LogFile = logFile, Regex = @"Test.*", Attempts = 2, BanTime = 1 } }
 });
 
 using var monitorCts = new CancellationTokenSource();
@@ -158,11 +158,11 @@ var monitorE = new LogMonitorService(Options.Create(new JailerOptions { Jails = 
 
 var callbackHits = new List<(string Ip, string Jail)>();
 var cbLock = new object();
-var cbTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+var cbTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 monitorE.ViolationDetected = (ip, rule) =>
 {
     lock (cbLock) { callbackHits.Add((ip, rule.Name)); }
-    cbTcs.TrySetResult();
+    cbTcs.TrySetResult(true);
 };
 
 var monitorTaskE = monitorE.StartMonitoringAsync(monitorCtsE.Token);
@@ -300,9 +300,8 @@ Check("extracts IP from 'authentication failed' line", Extract(ovpnAuthLine) == 
 // Part I: iptables rule syntax — the exact argument lists JailAsync/UnjailAsync
 // hand to iptables must be valid per the v1.8.7 usage output (the "Bad argument
 // 'DROP'" regression): the target may only appear after -j, never as a bare
-// positional token. A fake ICommandRunner captures what would actually run.
-// Also covers the /32-suffix regression: real `iptables -S INPUT` prints single-host
-// sources as "-s 123.60.139.156/32", which must still be recognised by IsJailedAsync.
+// positional token. A fake ICommandRunner captures what would actually run and
+// answers the `iptables -S INPUT` guard call with a canned chain listing.
 // ---------------------------------------------------------------------------
 var incidentIp = "61.177.197.82";
 
@@ -361,6 +360,39 @@ var svcSlashJail = new IptablesService(runnerSlashJail);
 var jailOkSlash = await svcSlashJail.JailAsync(incidentIp);
 Check("JailAsync is a no-op when the IP already has a '/32'-listed rule", !jailOkSlash);
 
+// ---------------------------------------------------------------------------
+// Part J: IPv6 Extraction & Matching — Ensure full/compressed IPv6 are handled.
+// ---------------------------------------------------------------------------
+var ipv6Full = "2001:db8:3c4d:0015:0000:0000:1a2b:3c4d";
+var ipv6Comp = "2001:db8:3c4d:15::1a2b:3c4d";
+var ipv4Test = "192.168.1.1";
+
+Check("extracts full IPv6 address", Extract(ipv6Full) == ipv6Full);
+Check("extracts compressed IPv6 address", Extract(ipv6Comp) == ipv6Comp);
+Check("extracts IPv4 address (regression)", Extract(ipv4Test) == "192.168.1.1");
+Check("IPv6 address matches regex", ipRe.IsMatch(ipv6Full));
+Check("compressed IPv6 address matches regex", ipRe.IsMatch(ipv6Comp));
+
+Check("<HOST> matches full IPv6",
+    Fail2BanFilter.Compile("^.*from <HOST>$").IsMatch("Jan 15 10:23:45 host sshd[1]: Failed password for root from " + ipv6Full));
+
+Check("<HOST> matches compressed IPv6",
+    Fail2BanFilter.Compile("^.*from <HOST>$").IsMatch("Jan 15 10:23:45 host sshd[1]: Failed password for root from " + ipv6Comp));
+
+
+// ---------------------------------------------------------------------------
+// Part K: Iptables vs Ip6tables selection — Verify binary choice based on IP.
+// ---------------------------------------------------------------------------
+var runnerK = new CapturingCommandRunner(null);
+var svcK = new IptablesService(runnerK, Options.Create(new IptablesOptions { Executable = "iptables", Ip6Executable = "ip6tables" }));
+
+await svcK.JailAsync("1.2.3.4"); // IPv4
+Check("uses iptables for IPv4", runnerK.Invocations.Last().Contains("iptables"));
+
+await svcK.JailAsync("2001:db8::1"); // IPv6
+Check("uses ip6tables for IPv6", runnerK.Invocations.Last().Contains("ip6tables"));
+
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
 return failures;
@@ -370,7 +402,7 @@ return failures;
 sealed class CapturingCommandRunner : ICommandRunner
 {
     public List<string> Invocations { get; } = new();
-    private readonly string _listOutput;
+    private readonly string? _listOutput;
 
     // Simulates `iptables -S INPUT` output: an empty chain, or a chain that
     // already holds Jailer's rule for the given IP. With useNetmaskSuffix the
@@ -396,7 +428,7 @@ sealed class CapturingCommandRunner : ICommandRunner
         Invocations.Add(fileName + " " + string.Join(' ', args));
         if (args.Count >= 2 && args[0] == "-S" && args[1] == "INPUT")
         {
-            return Task.FromResult(new CommandResult(0, _listOutput, string.Empty));
+            return Task.FromResult(new CommandResult(0, _listOutput ?? string.Empty, string.Empty));
         }
         return Task.FromResult(new CommandResult(0, string.Empty, string.Empty));
     }

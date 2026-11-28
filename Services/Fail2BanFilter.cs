@@ -19,8 +19,9 @@ namespace Jailer.Services
     /// </summary>
     public static class Fail2BanFilter
     {
-        private const string HostPattern =
-            @"(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)";
+        private const string IPv4Pattern = @"(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)";
+        private const string IPv6Pattern = @"(?:[a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}|(?:[a-fA-F0-9]{1,4}(?::[a-fA-F0-9]{1,4}){0,6}::(?:[a-fA-F0-9]{1,4}(?::[a-fA-F0-9]{1,4}){0,6})?|::(?:[a-fA-F0-9]{1,4}(?::[a-fA-F0-9]{1,4}){0,7}))";
+        private const string HostPattern = $@"({IPv4Pattern}|{IPv6Pattern})";
 
         // fail2ban's __prefix_line is "month day time host" — but real syslog lines carry the
         // program tag after the hostname ("Jan 15 10:23:45 myhost sshd[123]: Failed ..."), so we

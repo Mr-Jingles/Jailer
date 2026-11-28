@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Options;
 
 namespace Jailer.Services;
 
@@ -91,10 +92,12 @@ public sealed class IptablesOptions
 {
     public string Executable { get; set; } = "iptables";
 
+    /// <summary>Executable for IPv6 rules (e.g., ip6tables).</summary>
+    public string Ip6Executable { get; set; } = "ip6tables";
+
     public string Chain { get; set; } = "INPUT";
 
     public string RuleTarget { get; set; } = "DROP";
-
 }
 
 public sealed class IptablesService : IIptablesService
@@ -111,25 +114,42 @@ public sealed class IptablesService : IIptablesService
         _options = new IptablesOptions();
     }
 
+    public IptablesService(ICommandRunner runner, IOptions<IptablesOptions> options)
+    {
+        _runner = runner ?? throw new ArgumentNullException(nameof(runner));
+        _options = options.Value;
+    }
+
     private string BuildComment(string ip) => $"{CommentPrefix}{ip}";
+
+    private string GetExecutable(string ip)
+    {
+        if (System.Net.IPAddress.TryParse(ip, out var address))
+        {
+            return address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 
+                ? _options.Ip6Executable 
+                : _options.Executable;
+        }
+        return _options.Executable;
+    }
 
     public async Task<bool> JailAsync(string ip, CancellationToken cancellationToken = default)
     {
-        var iptables = _options;
-
         if (await IsJailedAsync(ip, cancellationToken).ConfigureAwait(false))
         {
             _logger.Debug("{0} is already jailed.", ip);
             return false;
         }
 
+        var executable = GetExecutable(ip);
+
         // -I inserts at the top of the chain so the block takes effect immediately.
-        var result = await _runner.RunAsync(iptables.Executable, new[]
+        var result = await _runner.RunAsync(executable, new[]
         {
-            "-I", iptables.Chain,
+            "-I", _options.Chain,
             "-s", ip,
             "-m", "comment", "--comment", BuildComment(ip),
-            "-j", iptables.RuleTarget,
+            "-j", _options.RuleTarget,
         }, cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
@@ -138,28 +158,28 @@ public sealed class IptablesService : IIptablesService
             return false;
         }
 
-        _logger.Information("Jailed {0} in chain {1} (target {2}).", ip, iptables.Chain, iptables.RuleTarget);
+        _logger.Information("Jailed {0} in chain {1} (target {2}).", ip, _options.Chain, _options.RuleTarget);
         return true;
     }
 
     public async Task<bool> UnjailAsync(string ip, CancellationToken cancellationToken = default)
     {
-        var iptables = _options;
-
         if (!await IsJailedAsync(ip, cancellationToken).ConfigureAwait(false))
         {
             _logger.Debug("{0} is not currently jailed.", ip);
             return false;
         }
 
+        var executable = GetExecutable(ip);
+
         // -D removes the first matching rule. Matching on source + comment guarantees we only
         // remove Jailer's own entry and never any unrelated rules in the chain.
-        var result = await _runner.RunAsync(iptables.Executable, new[]
+        var result = await _runner.RunAsync(executable, new[]
         {
-            "-D", iptables.Chain,
+            "-D", _options.Chain,
             "-s", ip,
             "-m", "comment", "--comment", BuildComment(ip),
-            "-j", iptables.RuleTarget,
+            "-j", _options.RuleTarget,
         }, cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
@@ -174,16 +194,25 @@ public sealed class IptablesService : IIptablesService
 
     public async Task<IReadOnlyCollection<string>> GetJailedIpsAsync(CancellationToken cancellationToken = default)
     {
-        var iptables = _options;
-        var result = await _runner.RunAsync(iptables.Executable, new[] { "-S", iptables.Chain }, cancellationToken).ConfigureAwait(false);
+        var ips = new List<string>();
+        
+        // We need to check both iptables and ip6tables for rules.
+        await AddJailedIpsFromBinary(_options.Executable, _options.Chain, ips, cancellationToken);
+        await AddJailedIpsFromBinary(_options.Ip6Executable, _options.Chain, ips, cancellationToken);
+
+        return ips.Distinct().ToList();
+    }
+
+    private async Task AddJailedIpsFromBinary(string executable, string chain, List<string> ipList, CancellationToken ct)
+    {
+        var result = await _runner.RunAsync(executable, new[] { "-S", chain }, ct).ConfigureAwait(false);
 
         if (!result.Success)
         {
-            _logger.Warning("Failed to list chain {0}: {1}", iptables.Chain, result.StandardError.Trim());
-            return Array.Empty<string>();
+            _logger.Warning("Failed to list chain {0} using {1}: {2}", chain, executable, result.StandardError.Trim());
+            return;
         }
 
-        var ips = new List<string>();
         foreach (var rawLine in result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var line = rawLine.Trim();
@@ -192,10 +221,6 @@ public sealed class IptablesService : IIptablesService
                 continue;
             }
 
-            // Extract the IP from "-s <ip>" in this rule. iptables -S prints single-host
-            // sources with a netmask suffix (e.g. "123.60.139.156/32"), so strip it before
-            // parsing; without that, IPAddress.TryParse fails and every Jailer rule is
-            // invisible to IsJailedAsync (unjails no-op, duplicate jail rules get inserted).
             var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             for (var i = 0; i + 1 < parts.Length; i++)
             {
@@ -213,13 +238,11 @@ public sealed class IptablesService : IIptablesService
 
                 if (System.Net.IPAddress.TryParse(candidate, out _))
                 {
-                    ips.Add(candidate);
+                    ipList.Add(candidate);
                     break;
                 }
             }
         }
-
-        return ips.Distinct().ToList();
     }
 
     public async Task CleanupAllJailsAsync(CancellationToken cancellationToken = default)
@@ -241,4 +264,3 @@ public sealed class IptablesService : IIptablesService
         return jailed.Contains(ip, StringComparer.OrdinalIgnoreCase);
     }
 }
-

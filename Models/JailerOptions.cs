@@ -24,6 +24,8 @@ public class IptablesSettings
     public string Table { get; set; } = "filter";
     public string Chain { get; set; } = "INPUT";
     public string Executable { get; set; } = "iptables";
+    /// <summary>Executable for IPv6 rules (e.g., ip6tables).</summary>
+    public string Ip6Executable { get; set; } = "ip6tables";
     public string RuleTarget { get; set; } = "DROP";
 }
 

@@ -17,23 +17,37 @@ namespace Jailer.Services
             @"\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b",
             RegexOptions.Compiled);
 
+        private static readonly Regex Ip6AddressRegex = new(
+            @"\b(?:[a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}\b|\b(?:[a-fA-F0-9]{1,4}(?::[a-fA-F0-9]{1,4}){0,6}::(?:[a-fA-F0-9]{1,4}(?::[a-fA-F0-9]{1,4}){0,6})?|::(?:[a-fA-F0-9]{1,4}(?::[a-fA-F0-9]{1,4}){0,7}))\b",
+            RegexOptions.Compiled);
+
         /// <summary>
         /// Extracts the offending IP from a matched log line. Prefers an address wrapped in
         /// parentheses — fail2ban's &lt;HOST&gt; convention for lines such as
         /// "refused connect from 10.9.8.7 (192.168.1.5)" where the parenthesised value is the
-        /// client address — and falls back to the first bare IPv4 in the line.
+        /// client address — and falls back to the first bare IPv4 or IPv6 in the line.
         /// </summary>
         public static string? ExtractIp(string line)
         {
             var parenthesized = System.Text.RegularExpressions.Regex.Match(
-                line, @"\((\d{1,3}(?:\.\d{1,3}){3})\)");
+                line, @"\((\b(?:[a-fA-F0-9]{1,4}(?::[a-fA-F0-9]{1,4}){7}|[0-9]{1,3}(?:\.[0-9]{1,3}){3})\b)\)");
             if (parenthesized.Success && System.Net.IPAddress.TryParse(parenthesized.Groups[1].Value, out _))
             {
                 return parenthesized.Groups[1].Value;
             }
+            var v4Match = IpAddressRegex.Match(line);
+            if (v4Match.Success && System.Net.IPAddress.TryParse(v4Match.Value, out _))
+            {
+                return v4Match.Value;
+            }
 
-            var first = IpAddressRegex.Match(line);
-            return first.Success ? first.Value : null;
+            var ipv6Match = Ip6AddressRegex.Match(line);
+            if (ipv6Match.Success && System.Net.IPAddress.TryParse(ipv6Match.Value, out _))
+            {
+                return ipv6Match.Value;
+            }
+
+            return null;
         }
 
         /// <summary>Attempt counts older than this are dropped, so a slow drip of one bad attempt per day never adds up to a ban. (Settable for testing.)</summary>
