@@ -121,6 +121,9 @@ dotnet run --project Tester
 
 It covers IP extraction, the fail2ban filter translation (`<HOST>`, `%(__prefix_line)s`, multi-line filters), end-to-end log monitoring with a fake log file, immediate violation callbacks, jail-state grouping/rendering, and attempt-window expiry.
 
+## AI Assistant Config
+this solution uses .github/copilot-instructions.md to hold its rules for AI agents and code assistance tools.
+
 ## License
 
 [MIT](LICENSE) — see the [LICENSE](LICENSE) file. Copyright (c) 2026 Edward Collins.
