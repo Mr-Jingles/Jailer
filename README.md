@@ -8,7 +8,7 @@ The goal is to keep fail2ban's behaviour while dropping its weight — no Python
 
 - **Jails** are defined in a single JSON file (`jails.json`). Each jail names a log file, a pattern to match, how many attempts trigger a ban, and for how long.
 - Patterns may be plain .NET regular expressions *or* fail2ban filter syntax: `<HOST>`, `%(__prefix_line)s` and other `%(...)s` variables are translated into equivalent .NET regexes at startup (see `Services/Fail2BanFilter.cs`). Multi-line filters work the same way as in fail2ban — each line is an independent alternative.
-- Log files are tailed from the end; matched lines have their IPv4 address extracted, and per-IP attempt counts accumulate within a 24-hour window (a slow drip of one bad attempt a day never adds up to a ban).
+- Log files are tailed from the end; matched lines have their IPv4/IPv6 address extracted, and per-IP attempt counts accumulate within a 24-hour window (a slow drip of one bad attempt a day never adds up to a ban).
 - When an IP reaches its threshold it is jailed **immediately**: an `iptables -I INPUT -s <ip> --comment jailer:<ip> DROP` rule is inserted. Rules are tagged with the `jailer:` comment so Jailer only ever removes its own entries.
 - Bans expire automatically — a cleanup loop releases them (at most 30 s after expiry) and prints the current state of every jail.
 
