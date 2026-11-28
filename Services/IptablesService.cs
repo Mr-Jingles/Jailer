@@ -122,6 +122,23 @@ public sealed class IptablesService : IIptablesService
 
     private string BuildComment(string ip) => $"{CommentPrefix}{ip}";
 
+    /// <summary>
+    /// Normalizes an IP address to its canonical string form (compressed IPv6, e.g.
+    /// 2001:db8:3c4d:0015:: -> 2001:db8:3c4d:15::). iptables normalizes the -s argument
+    /// but stores --comment verbatim, so jail/unjail must always use the same form or
+    /// the comment rebuilt at unjail time will not match the one stored at jail time.
+    /// Unparseable input is returned unchanged.
+    /// </summary>
+    private static string NormalizeIp(string ip)
+    {
+        if (System.Net.IPAddress.TryParse(ip, out var address))
+        {
+            return address.ToString();
+        }
+
+        return ip;
+    }
+
     private string GetExecutable(string ip)
     {
         if (System.Net.IPAddress.TryParse(ip, out var address))
@@ -135,6 +152,8 @@ public sealed class IptablesService : IIptablesService
 
     public async Task<bool> JailAsync(string ip, CancellationToken cancellationToken = default)
     {
+        ip = NormalizeIp(ip);
+
         if (await IsJailedAsync(ip, cancellationToken).ConfigureAwait(false))
         {
             _logger.Debug("{0} is already jailed.", ip);
@@ -164,6 +183,8 @@ public sealed class IptablesService : IIptablesService
 
     public async Task<bool> UnjailAsync(string ip, CancellationToken cancellationToken = default)
     {
+        ip = NormalizeIp(ip);
+
         if (!await IsJailedAsync(ip, cancellationToken).ConfigureAwait(false))
         {
             _logger.Debug("{0} is not currently jailed.", ip);
@@ -236,9 +257,11 @@ public sealed class IptablesService : IIptablesService
                     candidate = candidate[..slash];
                 }
 
-                if (System.Net.IPAddress.TryParse(candidate, out _))
+                if (System.Net.IPAddress.TryParse(candidate, out var parsed))
                 {
-                    ipList.Add(candidate);
+                    // Normalize so callers comparing against raw input IPs (e.g. the
+                    // zero-padded form captured from a log line) still match.
+                    ipList.Add(parsed.ToString());
                     break;
                 }
             }
@@ -261,6 +284,6 @@ public sealed class IptablesService : IIptablesService
     public async Task<bool> IsJailedAsync(string ip, CancellationToken cancellationToken = default)
     {
         var jailed = await GetJailedIpsAsync(cancellationToken).ConfigureAwait(false);
-        return jailed.Contains(ip, StringComparer.OrdinalIgnoreCase);
+        return jailed.Contains(NormalizeIp(ip), StringComparer.OrdinalIgnoreCase);
     }
 }
